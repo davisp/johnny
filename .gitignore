@@ -1,0 +1,6 @@
+.eunit/
+c_src/*.o
+deps/
+ebin/
+priv/
+test/*.beam
