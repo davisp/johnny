@@ -1,0 +1,6 @@
+{application, johnny, [
+    {description, "A NIF for efficient caching of Erlang terms."},
+    {vsn, git},
+    {registered, []},
+    {applications, [kernel]}
+]}.
