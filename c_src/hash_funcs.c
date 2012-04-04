@@ -1,4 +1,6 @@
 
+#include "johnny.h"
+
 int
 johnny_jenkins_single(ErlNifEnv* env, ENTERM key, unsigned int* ret)
 {

@@ -2,7 +2,7 @@
 % See the LICENSE file for more information.
 
 -module(johnny).
--export([new/0, new/1, get/2, put/3, del/2]).
+-export([new/0, new/1, get/2, put/3, del/2, size/1]).
 -define(NOT_LOADED, not_loaded(?LINE)).
 
 
@@ -35,6 +35,10 @@ del(Cache, Key) ->
     nif_del(Cache, term_to_binary(Key)).
 
 
+size(_Cache) ->
+    ?NOT_LOADED.
+
+
 init() ->
     PrivDir = case code:priv_dir(?MODULE) of
         {error, _} ->
@@ -47,13 +51,18 @@ init() ->
     erlang:load_nif(filename:join(PrivDir, "johnny"), 0).
 
 
-nif_get(Cache, Key) ->
+nif_get(_Cache, _Key) ->
     ?NOT_LOADED.
 
 
-nif_put(Cache, Key, Val) ->
+nif_put(_Cache, _Key, _Val) ->
     ?NOT_LOADED.
 
 
-nif_del(Cache, Key) ->
+nif_del(_Cache, _Key) ->
     ?NOT_LOADED.
+
+
+not_loaded(Line) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, Line}]}).
+

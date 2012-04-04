@@ -13,27 +13,29 @@ typedef struct _johnny_item_t
     ErlNifEnv*      env;
     ENTERM          key;
     ENTERM          val;
-} johnny_val_t;
+} johnny_item_t;
 
 typedef struct _johnny_t
 {
     void*           data;
     int             finalized;
-    int             (*get) (johnny_t*, johnny_item_t* item);
-    int             (*put) (johnny_t*, johnny_item_t* item);
-    int             (*del) (johnny_t*, johnny_item_t* item);
-    int             (*size) (johnny_t*);
-    void            (*dtor) (johnny_t*);
+    int             (*get) (void*, johnny_item_t* item);
+    int             (*put) (void*, johnny_item_t* item);
+    int             (*del) (void*, johnny_item_t* item);
+    int             (*size) (void*);
+    void            (*dtor) (void*);
 } johnny_t;
 
-ERL_NIF_TERM johnny_make_atom(ErlNifEnv* env, const char* name);
-ERL_NIF_TERM johnny_make_ok(johnny_ct* c, ErlNifEnv* env, ERL_NIF_TERM data);
-ERL_NIF_TERM johnny_make_error(johnny_ct* c, ErlNifEnv* env, const char* error);
+ENTERM johnny_make_ok(ErlNifEnv* env, ENTERM data);
+ENTERM johnny_make_error(ErlNifEnv* env, ENTERM data);
 
-int johnny_hash_init(johnny_t* ctx, ENTERM opts);
-
-johnny_item_t* johnny_item_create1(ErlNifEnv* env, ENTERM key);
-johnny_item_t* johnny_item_create2(ErlNifEnv* env, ENTERM key, ENTERM val);
+johnny_item_t* johnny_item_create(ENTERM key, ENTERM val);
 void johnny_item_destroy(johnny_item_t* item);
+
+extern ENTERM johnny_ok_a;
+extern ENTERM johnny_error_a;
+extern ENTERM johnny_internal_error_a;
+extern ENTERM johnny_already_finalized_a;
+extern ENTERM johnny_not_found_a;
 
 #endif // Included johnny.h

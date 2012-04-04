@@ -2,14 +2,20 @@
 // See the LICENSE file for more information.
 
 #include "johnny.h"
+#include "hash.h"
 
 ErlNifResourceType* johnny_res;
+ENTERM johnny_ok_a;
+ENTERM johnny_error_a;
+ENTERM johnny_internal_error_a;
+ENTERM johnny_already_finalized_a;
+ENTERM johnny_not_found_a;
 
 void
-johnny_res_dtor(void* obj)
+johnny_res_dtor(ErlNifEnv* env, void* obj)
 {
-    johnny_res_t* ctx = (johnny_ctx*) obj;
-    ctx->destroy(ctx->data);
+    johnny_t* ctx = (johnny_t*) obj;
+    ctx->dtor(ctx->data);
 }
 
 static int
@@ -17,9 +23,16 @@ load(ErlNifEnv* env, void** priv, ENTERM info)
 {
     int flags = ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER;
     johnny_res = enif_open_resource_type(
-            env, NULL, "johnny_res", johnny_dtor, flags, NULL
+            env, NULL, "johnny_res", johnny_res_dtor, flags, NULL
         );
     if(johnny_res == NULL) return 1;
+
+    johnny_ok_a = enif_make_atom(env, "ok");
+    johnny_error_a = enif_make_atom(env, "error");
+    johnny_internal_error_a = enif_make_atom(env, "internal_error");
+    johnny_already_finalized_a = enif_make_atom(env, "already_finalized");
+    johnny_not_found_a = enif_make_atom(env, "not_found");
+
     return 0;
 }
 
@@ -41,7 +54,7 @@ unload(ErlNifEnv* env, void* priv)
     return;
 }
 
-const ENTERM
+ENTERM
 nif_new(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
     johnny_t* ctx = (johnny_t*) enif_alloc_resource(
@@ -54,23 +67,24 @@ nif_new(ErlNifEnv* env, int argc, const ENTERM argv[])
 
     // Single type for now. Eventually iterate the
     // options and look for a specified type.
-    if(!johnny_hash_init(ctx, argv[0])) {
+    if(!johnny_hash_res_init(ctx, argv[0])) {
         ctx->finalized = 1;
         enif_release_resource(ctx);
-        return make_atom(env, "init_error");
+        return johnny_make_error(env, johnny_internal_error_a);
     }
 
     ctx->finalized = 0;
     ret = enif_make_resource(env, ctx);
     enif_release_resource(ctx);
-    return ret;
+    return johnny_make_ok(env, ret);
 }
 
-const ENTERM
+ENTERM
 nif_get(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
     johnny_t* ctx;
-    ENTERM ret;
+    johnny_item_t item;
+    int ret;
 
     if(argc != 2)
         return enif_make_badarg(env);
@@ -78,19 +92,25 @@ nif_get(ErlNifEnv* env, int argc, const ENTERM argv[])
         return enif_make_badarg(env);
 
     if(ctx->finalized)
-        return make_error(env, "already_finalized");
+        return johnny_make_error(env, johnny_already_finalized_a);
 
-    if(!ctx->get(ctx->data, argv[1], &ret))
-        return make_error(env, "internal_error");
+    item.env = env;
+    item.key = argv[1];
+    ret = ctx->get(ctx->data, &item);
+    if(ret == 0)
+        return johnny_make_ok(env, item.val);
+    if(ret > 0)
+        return johnny_make_error(env, item.val);
 
-    return ret;
+    return johnny_make_error(env, johnny_internal_error_a);
 }
 
-const ENTERM
+ENTERM
 nif_put(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
     johnny_t* ctx;
-    ENTERM ret;
+    johnny_item_t* item;
+    int ret;
 
     if(argc != 3)
         return enif_make_badarg(env);
@@ -98,19 +118,26 @@ nif_put(ErlNifEnv* env, int argc, const ENTERM argv[])
         return enif_make_badarg(env);
 
     if(ctx->finalized)
-        return make_error(env, "already_finalized");
+        return johnny_make_error(env, johnny_already_finalized_a);
 
-    if(!ctx->put(ctx->data, argv[1], argv[2]))
-        return make_error(env, "internal_error");
+    item = johnny_item_create(argv[1], argv[2]);
+    if(!item)
+        return johnny_make_error(env, johnny_internal_error_a);
 
-    return make_ok(env);
+    ret = ctx->put(ctx->data, item);
+    if(ret == 0)
+        return johnny_ok_a;
+
+    johnny_item_destroy(item);
+    return johnny_make_error(env, johnny_internal_error_a);
 }
 
-const ENTERM
+ENTERM
 nif_del(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
     johnny_t* ctx;
-    ENTERM ret;
+    johnny_item_t item;
+    int ret;
 
     if(argc != 2)
         return enif_make_badarg(env);
@@ -118,15 +145,20 @@ nif_del(ErlNifEnv* env, int argc, const ENTERM argv[])
         return enif_make_badarg(env);
 
     if(ctx->finalized)
-        return make_error(env, "already_finalized");
+        return johnny_make_error(env, johnny_already_finalized_a);
 
-    if(!ctx->del(ctx-data, argv[1], &ret))
-        return make_error(env, "internal_error");
+    item.env = env;
+    item.key = argv[1];
+    ret = ctx->del(ctx->data, &item);
+    if(ret == 0)
+        return johnny_make_ok(env, item.val);
+    if(ret > 0)
+        return johnny_make_error(env, item.val);
 
-    return johnny_make_ok(ctx, env, ret);
+    return johnny_make_error(env, johnny_internal_error_a);
 }
 
-const ENTERM
+ENTERM
 nif_size(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
     johnny_t* ctx;
@@ -138,23 +170,23 @@ nif_size(ErlNifEnv* env, int argc, const ENTERM argv[])
         return enif_make_badarg(env);
 
     if(ctx->finalized)
-        return make_error("already_finalized");
+        return johnny_make_error(env, johnny_already_finalized_a);
 
     size = ctx->size(ctx->data);
     if(size < 0) {
-        return make_error("internal_error");
+        return johnny_make_error(env, johnny_internal_error_a);
     } else {
-        return johnny_make_ok(ctx, env, enif_make_int(env, size));
+        return johnny_make_ok(env, enif_make_int(env, size));
     }
 }
 
-static ErlNifFun funcs[] =
+static ErlNifFunc funcs[] =
 {
-    {"nif_new", 1, nif_new},
+    {"new", 1, nif_new},
     {"nif_get", 2, nif_get},
     {"nif_put", 3, nif_put},
     {"nif_del", 2, nif_del},
-    {"nif_size", 1, nif_size}
+    {"size", 1, nif_size}
 };
 
 ERL_NIF_INIT(johnny, funcs, &load, &reload, &upgrade, &unload);

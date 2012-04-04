@@ -11,29 +11,30 @@
 
 
 #include <assert.h>
-#include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
+
+#include "johnny.h"
+#include "hash.h"
 
 #define JOHNNY_HASH_INIT_BUCKETS 1024
 #define JOHNNY_HASH_MAX_LOAD 0.75
-#define JOHNNY_HAHS_MIN_LOAD 0.25
+#define JOHNNY_HASH_MIN_LOAD 0.25
 
-typedef struct _johnny_hash_bucket_t {
+struct _johnny_hash_bucket_t {
     unsigned int                    hval;
     johnny_item_t*                  item;
     struct _johnny_hash_bucket_t*   next;
     struct _johnny_hash_bucket_t*   tail;
-} johnny_hash_bucket;
+};
 
-typedef struct _johnny_hash_t {
+struct _johnny_hash_t {
     johnny_hash_func_t              hashfunc;
     johnny_hash_bucket_t**          buckets;
     int                             num_buckets;
     int                             num_occupied;
     int                             upper_bound;
     int                             size;
-} johnny_hash_t;
+};
 
 johnny_hash_t*
 johnny_hash_create(ENTERM opts)
@@ -47,7 +48,7 @@ johnny_hash_create(ENTERM opts)
     bucket_bytes = sizeof(johnny_hash_t*) * JOHNNY_HASH_INIT_BUCKETS;
 
     ret->hashfunc = &johnny_jenkins_single;
-    ret->buckets = (johnny_bucket_t**) malloc(bucket_bytes);
+    ret->buckets = (johnny_hash_bucket_t**) malloc(bucket_bytes);
     if(!ret->buckets) {
         free(ret);
         return NULL;
@@ -56,8 +57,10 @@ johnny_hash_create(ENTERM opts)
 
     ret->num_buckets = JOHNNY_HASH_INIT_BUCKETS;
     ret->num_occupied = 0;
-    ret->upper_bound = int(ret->num_buckets * JOHNNY_HASH_MAX_LOAD);
+    ret->upper_bound = (int) (ret->num_buckets * JOHNNY_HASH_MAX_LOAD);
     ret->size = 0;
+
+    return ret;
 }
 
 void
@@ -92,7 +95,7 @@ johnny_hash_clear(johnny_hash_t* h)
 }
 
 int
-johnny_hash_get(johnny_hash_t* h, johnny_item_t* item)
+johnny_hash_get(johnny_hash_t* h, johnny_item_t* i)
 {
     johnny_hash_bucket_t* iter;
     unsigned int hval;
@@ -100,8 +103,8 @@ johnny_hash_get(johnny_hash_t* h, johnny_item_t* item)
     assert(h != NULL && "hash is null");
     assert(h->buckets != NULL && "hash has no buckets");
 
-    if(!h->hashfunc(item->env, item->key, &hval))
-        return 0;
+    if(!h->hashfunc(i->env, i->key, &hval))
+        return -1;
 
     iter = h->buckets[hval % h->num_buckets];
     while(iter) {
@@ -109,28 +112,29 @@ johnny_hash_get(johnny_hash_t* h, johnny_item_t* item)
             iter = iter->next;
             continue;
         }
-        if(enif_compare(item->key, iter->item->key) == 0) {
-            item->val = enif_make_copy(item->env, iter->item->val);
-            return 1;
+        if(enif_compare(i->key, iter->item->key) == 0) {
+            i->val = enif_make_copy(i->env, iter->item->val);
+            return 0;
         }
         iter = iter->next;
     }
 
-    return 0;
+    i->val = johnny_not_found_a;
+    return 1;
 }
 
 int
-johnny_hash_put(johnny_hash_t* h, johnny_item_t* item)
+johnny_hash_put(johnny_hash_t* h, johnny_item_t* i)
 {
     johnny_hash_bucket_t* iter;
     johnny_hash_bucket_t* next;
     unsigned int hval;
 
     assert(h != NULL && "hash is null");
-    assert(h->buckset != NULL && "hash has no buckets");
+    assert(h->buckets != NULL && "hash has no buckets");
 
-    if(!h->hashfunc(item->env, item->key, &hval))
-        return 0;
+    if(!h->hashfunc(i->env, i->key, &hval))
+        return -1;
 
     iter = h->buckets[hval % h->num_buckets];
     while(iter) {
@@ -138,29 +142,35 @@ johnny_hash_put(johnny_hash_t* h, johnny_item_t* item)
             iter = iter->next;
             continue;
         }
-        if(enif_compare(item->key, iter->item->key) == 0) {
+        if(enif_compare(i->key, iter->item->key) == 0) {
             johnny_item_destroy(iter->item);
-            iter->item = item;
-            return 1;
+            iter->item = i;
+            return 0;
         }
         iter = iter->next;
     }
 
     next = (johnny_hash_bucket_t*) malloc(sizeof(johnny_hash_bucket_t));
-    if(!next) return 0;
+    if(!next) return -1;
     next->hval = hval;
-    next->item = item;
+    next->item = i;
     next->next = NULL;
     next->tail = NULL;
 
-    h->buckets[hval % h->num_buckets]->tail->next = next;
-    h->buckets[hval % h->num_buckets]->tail = next;
+    iter = h->buckets[hval % h->num_buckets];
 
-    return 1;
+    if(iter) {
+        if(iter->tail) iter->tail->next = next;
+        iter->tail = next;
+    } else {
+        h->buckets[hval % h->num_buckets] = next;
+    }
+
+    return 0;
 }
 
 int
-johnny_hash_del(johnny_hash_t* h, johnny_item_t* item)
+johnny_hash_del(johnny_hash_t* h, johnny_item_t* i)
 {
     johnny_hash_bucket_t* iter;
     johnny_hash_bucket_t* prev;
@@ -170,7 +180,7 @@ johnny_hash_del(johnny_hash_t* h, johnny_item_t* item)
     assert(h->buckets != NULL && "hash has no buckets");
 
     if(!h->hashfunc(i->env, i->key, &hval))
-        return 0;
+        return -1;
 
     iter = h->buckets[hval % h->num_buckets];
     prev = NULL;
@@ -180,25 +190,29 @@ johnny_hash_del(johnny_hash_t* h, johnny_item_t* item)
             iter = iter->next;
             continue;
         }
-        if(enif_compare(item->key, iter->item->key) == 0) {
+        if(enif_compare(i->key, iter->item->key) == 0) {
             break;
         }
         prev = iter;
         iter = iter->next;
     }
 
-    if(!iter) return 0;
+    if(!iter) {
+        i->val = johnny_not_found_a;
+        return 1;
+    }
 
     if(prev == NULL) {
         h->buckets[hval % h->num_buckets] = iter->next;
-        iter->next->tail = iter->tail;
+        if(iter->next) iter->next->tail = iter->tail;
     } else {
         prev->next = iter->next;
     }
 
-    item->val = enif_make_copy(item->env, iter->item->val);
+    i->val = enif_make_copy(i->env, iter->item->val);
     johnny_item_destroy(iter->item);
     free(iter);
+
     return 0;
 }
 
@@ -211,22 +225,23 @@ johnny_hash_size(johnny_hash_t* h)
 int
 johnny_hash_resize(johnny_hash_t* h)
 {
-    johnny_hash_bucket_t* new_buckets;
+    johnny_hash_bucket_t** new_buckets;
     johnny_hash_bucket_t* iter;
     johnny_hash_bucket_t* next;
+    unsigned int new_num_buckets;
+    unsigned int new_occupied;
     unsigned int new_size;
-    unsigned int new_occuppied;
     size_t bucket_bytes;
     size_t i;
 
     if(h->num_occupied < h->upper_bound) return 1;
 
-    new_num_buckets = int(h->num_occupied / JOHNNY_HASH_MIN_LOAD);
+    new_num_buckets = (int) (h->num_occupied / JOHNNY_HASH_MIN_LOAD);
     new_occupied = 0;
     new_size = 0;
 
     bucket_bytes = sizeof(johnny_hash_bucket_t*) * new_num_buckets;
-    new_buckets = (johnny_hash_bucket_t*) malloc(bucket_bytes);
+    new_buckets = (johnny_hash_bucket_t**) malloc(bucket_bytes);
     if(new_buckets == NULL)
         return 0;
 
@@ -251,9 +266,57 @@ johnny_hash_resize(johnny_hash_t* h)
     free(h->buckets);
     h->buckets = new_buckets;
     h->num_buckets = new_size;
-    h->num_occupied = new_occupied
+    h->num_occupied = new_occupied;
     assert(new_size == h->size && "missing item after hash resize");
-    h->upper_bound = int(JOHNNY_HASH_MAX_LOAD * num_buckets);
+    h->upper_bound = (int) (JOHNNY_HASH_MAX_LOAD * new_num_buckets);
+
+    return 1;
+}
+
+
+int
+_johnny_hash_get(void* h, johnny_item_t* i)
+{
+    return johnny_hash_get((johnny_hash_t*) h, i);
+}
+
+int
+_johnny_hash_put(void* h, johnny_item_t* i)
+{
+    return johnny_hash_put((johnny_hash_t*) h, i);
+}
+
+int
+_johnny_hash_del(void* h, johnny_item_t* i)
+{
+    return johnny_hash_del((johnny_hash_t*) h, i);
+}
+
+int
+_johnny_hash_size(void* h)
+{
+    return johnny_hash_size((johnny_hash_t*) h);
+}
+
+void
+_johnny_hash_dtor(void* h)
+{
+    johnny_hash_destroy((johnny_hash_t*) h);
+}
+
+int
+johnny_hash_res_init(johnny_t* res, ENTERM opts)
+{
+    johnny_hash_t* t = johnny_hash_create(opts);
+    if(!t) return 0;
+
+    res->data = (void*) t;
+    res->finalized = 0;
+    res->get = &_johnny_hash_get;
+    res->put = &_johnny_hash_put;
+    res->del = &_johnny_hash_del;
+    res->size = &_johnny_hash_size;
+    res->dtor = &_johnny_hash_dtor;
 
     return 1;
 }
