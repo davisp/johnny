@@ -60,7 +60,8 @@ command(S) ->
         {9, {call, johnny, put, [S#st.h, Key, val()]}},
         {1, {call, johnny, put, [S#st.h, key(), val()]}},
         {2, {call, johnny, del, [S#st.h, Key]}},
-        {1, {call, johnny, del, [S#st.h, key()]}}
+        {1, {call, johnny, del, [S#st.h, key()]}},
+        {1, {call, johnny, size, [S#st.h]}}
     ]).
 
 
@@ -87,8 +88,12 @@ postcondition(_S, {call, _, del, [_C, _Key]}, {ok, _Val}) ->
     true;
 postcondition(_S, {call, _, del, [_C, _Key]}, {error, not_found}) ->
     true;
+postcondition(S, {call, _, size, [_C]}, {ok, Size}) ->
+    case dict:size(S#st.d) of
+        Size -> true;
+        _ -> false
+    end;
 postcondition(_S, _A, _R) ->
-    io:format(standard_error, "~p ~p ~p", [_S, _A, _R]),
     false.
 
 
@@ -101,7 +106,9 @@ next_state(S, _V, {call, _, put, [_C, Key, Val]}) ->
 next_state(S, _V, {call, _, del, [_C, Key]}) ->
     S#st{
         d={call, dict, erase, [Key, S#st.d]}
-    }.
+    };
+next_state(S, _V, {call, _, size, [_C]}) ->
+    S.
 
 
 random_key(#st{d=D}) ->

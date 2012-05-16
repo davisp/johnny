@@ -17,6 +17,7 @@ typedef struct _johnny_item_t
 
 typedef struct _johnny_t
 {
+    ErlNifMutex*    lock;
     void*           data;
     int             finalized;
     int             (*get) (void*, johnny_item_t* item);

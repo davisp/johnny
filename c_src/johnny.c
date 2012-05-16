@@ -14,8 +14,8 @@ ENTERM johnny_not_found_a;
 void
 johnny_res_dtor(ErlNifEnv* env, void* obj)
 {
-    johnny_t* ctx = (johnny_t*) obj;
-    ctx->dtor(ctx->data);
+    johnny_t* res = (johnny_t*) obj;
+    res->dtor(res->data);
 }
 
 static int
@@ -57,46 +57,67 @@ unload(ErlNifEnv* env, void* priv)
 ENTERM
 nif_new(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
-    johnny_t* ctx = (johnny_t*) enif_alloc_resource(
+    ENTERM ret;
+    johnny_t* res = (johnny_t*) enif_alloc_resource(
             johnny_res, sizeof(johnny_t)
         );
-    ENTERM ret;
 
-    if(argc != 1)
-        return enif_make_badarg(env);
+    if(!res) {
+        ret = johnny_make_error(env, johnny_internal_error_a);
+        goto error;
+    }
+
+    res->finalized = 0;
+
+    if(argc != 1) {
+        ret = enif_make_badarg(env);
+        goto error;
+    }
+
+    res->lock = enif_mutex_create(NULL);
+    if(!res->lock) {
+        ret = johnny_make_error(env, johnny_internal_error_a);
+        goto error;
+    }
 
     // Single type for now. Eventually iterate the
     // options and look for a specified type.
-    if(!johnny_hash_res_init(ctx, argv[0])) {
-        ctx->finalized = 1;
-        enif_release_resource(ctx);
+    if(!johnny_hash_res_init(res, argv[0])) {
+        res->finalized = 1;
+        enif_release_resource(res);
         return johnny_make_error(env, johnny_internal_error_a);
     }
 
-    ctx->finalized = 0;
-    ret = enif_make_resource(env, ctx);
-    enif_release_resource(ctx);
-    return johnny_make_ok(env, ret);
+    res->finalized = 0;
+    ret = johnny_make_ok(env, enif_make_resource(env, res));
+
+error:
+    if(res) enif_release_resource(res);
+    return ret;
 }
 
 ENTERM
 nif_get(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
-    johnny_t* ctx;
+    johnny_t* res;
     johnny_item_t item;
     int ret;
 
     if(argc != 2)
         return enif_make_badarg(env);
-    if(!enif_get_resource(env, argv[0], johnny_res, (void**) &ctx))
+    if(!enif_get_resource(env, argv[0], johnny_res, (void**) &res))
         return enif_make_badarg(env);
 
-    if(ctx->finalized)
+    if(res->finalized)
         return johnny_make_error(env, johnny_already_finalized_a);
 
     item.env = env;
     item.key = argv[1];
-    ret = ctx->get(ctx->data, &item);
+
+    enif_mutex_lock(res->lock);
+    ret = res->get(res->data, &item);
+    enif_mutex_unlock(res->lock);
+
     if(ret == 0)
         return johnny_make_ok(env, item.val);
     if(ret > 0)
@@ -108,23 +129,26 @@ nif_get(ErlNifEnv* env, int argc, const ENTERM argv[])
 ENTERM
 nif_put(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
-    johnny_t* ctx;
+    johnny_t* res;
     johnny_item_t* item;
     int ret;
 
     if(argc != 3)
         return enif_make_badarg(env);
-    if(!enif_get_resource(env, argv[0], johnny_res, (void**) &ctx))
+    if(!enif_get_resource(env, argv[0], johnny_res, (void**) &res))
         return enif_make_badarg(env);
 
-    if(ctx->finalized)
+    if(res->finalized)
         return johnny_make_error(env, johnny_already_finalized_a);
 
     item = johnny_item_create(argv[1], argv[2]);
     if(!item)
         return johnny_make_error(env, johnny_internal_error_a);
 
-    ret = ctx->put(ctx->data, item);
+    enif_mutex_lock(res->lock);
+    ret = res->put(res->data, item);
+    enif_mutex_unlock(res->lock);
+
     if(ret == 0)
         return johnny_ok_a;
 
@@ -135,21 +159,25 @@ nif_put(ErlNifEnv* env, int argc, const ENTERM argv[])
 ENTERM
 nif_del(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
-    johnny_t* ctx;
+    johnny_t* res;
     johnny_item_t item;
     int ret;
 
     if(argc != 2)
         return enif_make_badarg(env);
-    if(!enif_get_resource(env, argv[0], johnny_res, (void**) &ctx))
+    if(!enif_get_resource(env, argv[0], johnny_res, (void**) &res))
         return enif_make_badarg(env);
 
-    if(ctx->finalized)
+    if(res->finalized)
         return johnny_make_error(env, johnny_already_finalized_a);
 
     item.env = env;
     item.key = argv[1];
-    ret = ctx->del(ctx->data, &item);
+
+    enif_mutex_lock(res->lock);
+    ret = res->del(res->data, &item);
+    enif_mutex_unlock(res->lock);
+
     if(ret == 0)
         return johnny_make_ok(env, item.val);
     if(ret > 0)
@@ -161,18 +189,21 @@ nif_del(ErlNifEnv* env, int argc, const ENTERM argv[])
 ENTERM
 nif_size(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
-    johnny_t* ctx;
+    johnny_t* res;
     int size;
 
     if(argc != 1)
         return enif_make_badarg(env);
-    if(!enif_get_resource(env, argv[0], johnny_res, (void**) &ctx))
+    if(!enif_get_resource(env, argv[0], johnny_res, (void**) &res))
         return enif_make_badarg(env);
 
-    if(ctx->finalized)
+    if(res->finalized)
         return johnny_make_error(env, johnny_already_finalized_a);
 
-    size = ctx->size(ctx->data);
+    enif_mutex_lock(res->lock);
+    size = res->size(res->data);
+    enif_mutex_unlock(res->lock);
+
     if(size < 0) {
         return johnny_make_error(env, johnny_internal_error_a);
     } else {

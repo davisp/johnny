@@ -164,7 +164,9 @@ johnny_hash_put(johnny_hash_t* h, johnny_item_t* i)
         iter->tail = next;
     } else {
         h->buckets[hval % h->num_buckets] = next;
+        h->num_occupied++;
     }
+    h->size++;
 
     return 0;
 }
@@ -204,10 +206,14 @@ johnny_hash_del(johnny_hash_t* h, johnny_item_t* i)
 
     if(prev == NULL) {
         h->buckets[hval % h->num_buckets] = iter->next;
-        if(iter->next) iter->next->tail = iter->tail;
+        if(iter->next)
+            iter->next->tail = iter->tail;
+        if(iter->next == NULL)
+            h->num_occupied--;
     } else {
         prev->next = iter->next;
     }
+    h->size--;
 
     i->val = enif_make_copy(i->env, iter->item->val);
     johnny_item_destroy(iter->item);
