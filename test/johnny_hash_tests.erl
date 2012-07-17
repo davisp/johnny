@@ -6,6 +6,11 @@
 
 
 -export([
+    prop_hash_any/0,
+    prop_hash_kvs/0
+]).
+
+-export([
     initial_state/0,
     command/1,
     precondition/2,
@@ -14,20 +19,21 @@
     random_key/1
 ]).
 
+
 -record(st, {h, d}).
 
 proper_test_() ->
     PropErOpts = [
         {to_file, user},
         {max_size, 10},
-        {numtests, 1000}
+        {numtests, 500}
     ],
     {timeout, 3600, ?_assertEqual([], proper:module(?MODULE, PropErOpts))}.
 
 
 prop_hash_any() ->
     ?FORALL({K, V}, kvs(), begin
-        {ok, C} = johnny:new(),
+        {ok, C} = johnny:hash(),
         case (catch johnny:put(C, K, V)) of
             ok -> johnny:get(C, K) == {ok, V};
             _ -> false
@@ -40,27 +46,30 @@ prop_hash_kvs() ->
         begin
             {H, S, R} = run_commands(?MODULE, Cmds),
             cleanup(S),
+            Fmt = "History: ~p~nState: ~p~nRes: ~p~nCommands: ~p~n",
             ?WHENFAIL(
-                io:format("History: ~p\nState: ~p\nRes: ~p\n", [H,S,R]),
+                io:format(standard_error, Fmt, [H,S,R,Cmds]),
                 R =:= ok
             )
         end
     ).
 
 initial_state() ->
-    {ok, H} = johnny:new(),
+    {ok, H} = johnny:hash(),
     #st{h=H, d=dict:new()}.
 
 
 command(S) ->
     Key = {call, johnny_hash_tests, random_key, [S]},
     frequency([
+        {1, {call, johnny, clear, [S#st.h]}},
         {9, {call, johnny, get, [S#st.h, Key]}},
-        {1, {call, johnny, get, [S#st.h, key()]}},
+        {2, {call, johnny, get, [S#st.h, key()]}},
         {9, {call, johnny, put, [S#st.h, Key, val()]}},
-        {1, {call, johnny, put, [S#st.h, key(), val()]}},
+        {2, {call, johnny, put, [S#st.h, key(), val()]}},
         {2, {call, johnny, del, [S#st.h, Key]}},
-        {1, {call, johnny, del, [S#st.h, key()]}},
+        {2, {call, johnny, del, [S#st.h, key()]}},
+        {1, {call, johnny, keys, [S#st.h]}},
         {1, {call, johnny, size, [S#st.h]}}
     ]).
 
@@ -69,25 +78,21 @@ precondition(_, _) ->
     true.
 
 
-postcondition(S, {call, _, get, [_C, Key]}, Val) ->
-    case dict:is_key(Key, S#st.d) of
-        true ->
-            case dict:find(Key, S#st.d) of
-                Val -> true;
-                _ -> false
-            end;
-        false ->
-            case Val of
-                {error, not_found} -> true;
-                _ -> false
-            end
-    end;
+postcondition(S, {call, _, clear, [_C]}, ok) ->
+    true;
+postcondition(S, {call, _, get, [_C, Key]}, {ok, Val}) ->
+    {ok, Val} == dict:find(Key, S#st.d);
+postcondition(S, {call, _, get, [_C, Key]}, {error, not_found}) ->
+    dict:is_key(Key, S#st.d) == false;
 postcondition(_S, {call, _, put, [_C, _Key, _Val]}, ok) ->
     true;
-postcondition(_S, {call, _, del, [_C, _Key]}, {ok, _Val}) ->
+postcondition(_S, {call, _, del, [_C, _Key]}, ok) ->
     true;
 postcondition(_S, {call, _, del, [_C, _Key]}, {error, not_found}) ->
     true;
+postcondition(S, {call, _, keys, [_C]}, {ok, HKeys}) ->
+    DKeys = dict:fetch_keys(S#st.d),
+    lists:sort(HKeys) == lists:sort(DKeys);
 postcondition(S, {call, _, size, [_C]}, {ok, Size}) ->
     case dict:size(S#st.d) of
         Size -> true;
@@ -97,16 +102,19 @@ postcondition(_S, _A, _R) ->
     false.
 
 
+next_state(S, _V, {call, _, clear, [_C]}) ->
+    D = {call, dict, new, []},
+    S#st{d=D};
 next_state(S, _V, {call, _, get, [_C, _Key]}) ->
     S;
 next_state(S, _V, {call, _, put, [_C, Key, Val]}) ->
-    S#st{
-        d={call, dict, store, [Key, Val, S#st.d]}
-    };
+    D = {call, dict, store, [Key, Val, S#st.d]},
+    S#st{d=D};
 next_state(S, _V, {call, _, del, [_C, Key]}) ->
-    S#st{
-        d={call, dict, erase, [Key, S#st.d]}
-    };
+    D = {call, dict, erase, [Key, S#st.d]},
+    S#st{d=D};
+next_state(S, _V, {call, _, keys, [_C]}) ->
+    S;
 next_state(S, _V, {call, _, size, [_C]}) ->
     S.
 
@@ -117,6 +125,7 @@ random_key(#st{d=D}) ->
     NumKeys = erlang:length(Keys),
     KeyPos = random:uniform(NumKeys),
     lists:nth(KeyPos, Keys).
+
 
 cleanup(_S) ->
     ok.

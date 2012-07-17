@@ -4,25 +4,28 @@
 #ifndef JOHNNY_HASH_H
 #define JOHNNY_HASH_H
 
-#include "johnny.h"
+#include "jtypes.h"
+
 
 typedef struct _johnny_hash_bucket_t johnny_hash_bucket_t;
 typedef struct _johnny_hash_t johnny_hash_t;
-typedef int (*johnny_hash_func_t) (ErlNifEnv*, ENTERM, unsigned int*);
 
-johnny_hash_t* johnny_hash_create(ENTERM opts);
+typedef struct {
+    johnny_hash_func_t*     hash;
+    johnny_cmp_func_t*      cmp;
+    johnny_dtor_t*          dtor;
+} johnny_hash_opts_t;
+
+
+johnny_hash_t* johnny_hash_create(johnny_hash_opts_t* opts);
 void johnny_hash_destroy(johnny_hash_t* h);
 void johnny_hash_clear(johnny_hash_t* h);
-int johnny_hash_get(johnny_hash_t* h, johnny_item_t* i);
-int johnny_hash_put(johnny_hash_t* h, johnny_item_t* i);
-int johnny_hash_del(johnny_hash_t* h, johnny_item_t* i);
+int johnny_hash_get(johnny_hash_t* h, void* i, void** ret);
+int johnny_hash_put(johnny_hash_t* h, void* i);
+int johnny_hash_del(johnny_hash_t* h, void* i, void** ret);
+int johnny_hash_iter(johnny_hash_t* h, johnny_iter_func_t* iter, void* ctx);
 int johnny_hash_size(johnny_hash_t* h);
 int johnny_hash_resize(johnny_hash_t* h);
 
-// Hash Functions
-int johnny_jenkins_single(ErlNifEnv* env, ENTERM key, unsigned int* hash);
-
-// Resource init
-int johnny_hash_res_init(johnny_t* res, ENTERM opts);
 
 #endif // Included hash.h

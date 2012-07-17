@@ -2,41 +2,98 @@
 % See the LICENSE file for more information.
 
 -module(johnny).
--export([new/0, new/1, get/2, put/3, del/2, size/1]).
--define(NOT_LOADED, not_loaded(?LINE)).
 
+-export([
+    info/0,
+    info/1,
+
+    hash/0,
+    hash/1,
+    hash/2,
+
+    clear/1,
+    get/2,
+    get/3,
+    put/3,
+    del/2,
+    keys/1,
+    to_list/1,
+    size/1
+]).
+
+
+-define(NOT_LOADED, not_loaded(?LINE)).
 
 -on_load(init/0).
 
 
-new() ->
-    new([]).
-
-
-new(_Options) ->
+info() ->
     ?NOT_LOADED.
 
 
-get(Cache, Key) when is_binary(Key) ->
-    nif_get(Cache, Key);
-get(Cache, Key) ->
-    nif_get(Cache, term_to_binary(Key)).
-
-
-put(Cache, Key, Val) when is_binary(Key) ->
-    nif_put(Cache, Key, Val);
-put(Cache, Key, Val) ->
-    nif_put(Cache, term_to_binary(Key), Val).
-
-
-del(Cache, Key) when is_binary(Key) ->
-    nif_del(Cache, Key);
-del(Cache, Key) ->
-    nif_del(Cache, term_to_binary(Key)).
-
-
-size(_Cache) ->
+info(_Object) ->
     ?NOT_LOADED.
+
+
+hash() ->
+    hash([], []).
+
+hash(KVs) ->
+    hash(KVs, []).
+
+hash(KVs, Opts) ->
+    case hash_new(Opts) of
+        {ok, Handle} ->
+            lists:foreach(fun({K, V}) ->
+                hash_put(Handle, term_to_binary(K), V)
+            end, KVs),
+            {ok, {johnny_hash, Handle}};
+        Else ->
+            Else
+    end.
+
+
+clear({johnny_hash, Handle}) ->
+    hash_clear(Handle).
+
+
+get({johnny_hash, Handle}, Key) ->
+    hash_get(Handle, term_to_binary(Key)).
+
+
+get({johnny_hash, Handle}, Key, Default) ->
+    hash_get(Handle, term_to_binary(Key), Default).
+
+
+put({johnny_hash, Handle}, Key, Value) ->
+    hash_put(Handle, term_to_binary(Key), Value).
+
+
+del({johnny_hash, Handle}, Key) ->
+    hash_del(Handle, term_to_binary(Key)).
+
+
+keys({johnny_hash, Handle}) ->
+    case hash_keys(Handle) of
+        {ok, List} ->
+            {ok, lists:map(fun erlang:binary_to_term/1, List)};
+        Else ->
+            Else
+    end.
+
+
+to_list({johnny_hash, Handle}) ->
+    case hash_to_list(Handle) of
+        {ok, List} ->
+            Conv = fun({K, V}) -> {binary_to_term(K), V} end,
+            {ok, lists:map(Conv, List)};
+        Else ->
+            Else
+    end.
+
+
+size({johnny_hash, Handle}) ->
+    hash_size(Handle).
 
 
 init() ->
@@ -51,18 +108,35 @@ init() ->
     erlang:load_nif(filename:join(PrivDir, "johnny"), 0).
 
 
-nif_get(_Cache, _Key) ->
-    ?NOT_LOADED.
-
-
-nif_put(_Cache, _Key, _Val) ->
-    ?NOT_LOADED.
-
-
-nif_del(_Cache, _Key) ->
-    ?NOT_LOADED.
-
-
 not_loaded(Line) ->
     erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, Line}]}).
 
+
+% Hash NIF functions
+
+hash_new(_Opts) ->
+    ?NOT_LOADED.
+
+hash_clear(_Hash) ->
+    ?NOT_LOADED.
+
+hash_get(_Hash, _Key) ->
+    ?NOT_LOADED.
+
+hash_get(_Hash, _Key, _Default) ->
+    ?NOT_LOADED.
+
+hash_put(_Hash, _Key, _Val) ->
+    ?NOT_LOADED.
+
+hash_del(_Hash, _Key) ->
+    ?NOT_LOADED.
+
+hash_keys(_Hash) ->
+    ?NOT_LOADED.
+
+hash_to_list(_Hash) ->
+    ?NOT_LOADED.
+
+hash_size(_Hash) ->
+    ?NOT_LOADED.
