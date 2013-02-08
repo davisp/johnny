@@ -37,7 +37,8 @@ johnny_item_create(ENTERM key, ENTERM val)
         return NULL;
     }
 
-    ret->key = enif_make_copy(ret->env, key);
+    if(key != 0)
+        ret->key = enif_make_copy(ret->env, key);
     ret->val = enif_make_copy(ret->env, val);
 
     return ret;

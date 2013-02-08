@@ -23,7 +23,7 @@ void johnny_hash_clear(johnny_hash_t* h);
 int johnny_hash_get(johnny_hash_t* h, void* i, void** ret);
 int johnny_hash_put(johnny_hash_t* h, void* i);
 int johnny_hash_del(johnny_hash_t* h, void* i, void** ret);
-int johnny_hash_iter(johnny_hash_t* h, johnny_iter_func_t* iter, void* ctx);
+int johnny_hash_iter(johnny_hash_t* h, johnny_iter_func_t* iterfunc, void* ctx);
 int johnny_hash_size(johnny_hash_t* h);
 int johnny_hash_resize(johnny_hash_t* h);
 
