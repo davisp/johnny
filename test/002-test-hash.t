@@ -2,11 +2,12 @@
 % This file is part of Johnny released under the MIT license.
 % See the LICENSE file for more information.
 
-num_cycles() -> 10000.
+num_cycles() -> 5000.
 
 main([]) ->
     code:add_pathz("ebin"),
     code:add_pathz("test"),
+    random:seed(erlang:now()),
 
     etap:plan(10),
 
@@ -55,7 +56,8 @@ run(_, N, S) when N =< 0 ->
 run(Actions, N, S0) ->
     Action = weighted_choice(Actions),
     S1 = Action(S0),
-    run(Actions, N-1, check_state(S1)).
+    % ok = check_state(S1),
+    run(Actions, N-1, S1).
 
 
 run_clear({_D0, H}) ->
@@ -135,7 +137,7 @@ check_state({D, H}) ->
     HKVs = lists:sort(HKVs0),
     case DKVs == HKVs of
         true ->
-            {D, H};
+            ok;
         false ->
             etap:bail("Bad hash state")
     end.
@@ -162,4 +164,4 @@ random_key(D) ->
 
 
 random_val() ->
-    gen_term:any(0).
+    gen_term:any().
