@@ -6,7 +6,6 @@
 
 #include "erl_nif.h"
 
-
 typedef ERL_NIF_TERM ENTERM;
 typedef void (johnny_nif_dtor_t) (ErlNifEnv*, void*);
 

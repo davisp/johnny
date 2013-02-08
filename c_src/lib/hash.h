@@ -6,7 +6,6 @@
 
 #include "jtypes.h"
 
-
 typedef struct _johnny_hash_bucket_t johnny_hash_bucket_t;
 typedef struct _johnny_hash_t johnny_hash_t;
 

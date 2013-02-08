@@ -2,6 +2,10 @@
 // See the LICENSE file for more information.
 
 #include "lib/johnny.h"
+#include "lib/atoms.h"
+#include "lib/hash.h"
+#include "lib/phash2.h"
+#include "lib/util.h"
 
 
 typedef struct {
@@ -17,6 +21,9 @@ typedef struct {
 
 
 ErlNifResourceType* JOHNNY_NIF_HASH_RES;
+
+
+void johnny_nif_hash_destroy(ErlNifEnv* env, void* obj);
 
 
 static int
@@ -51,6 +58,15 @@ static void
 unload(ErlNifEnv* env, void* priv)
 {
     return;
+}
+
+
+int
+johnny_nif_hash_hash(void* obj, unsigned int* hval)
+{
+    johnny_item_t* i = (johnny_item_t*) obj;
+    *hval = johnny_phash2(i->key);
+    return 1;
 }
 
 
@@ -337,18 +353,15 @@ johnny_nif_hash_size(ErlNifEnv* env, int argc, const ENTERM argv[])
 
 
 static ErlNifFunc nif_funcs[] = {
-    {"hash_new", 1, johnny_nif_hash_new},
-    {"hash_clear", 1, johnny_nif_hash_clear},
-    {"hash_get", 2, johnny_nif_hash_get},
-    {"hash_get", 3, johnny_nif_hash_get},
-    {"hash_put", 3, johnny_nif_hash_put},
-    {"hash_del", 2, johnny_nif_hash_del},
-    {"hash_size", 1, johnny_nif_hash_size},
-    {"hash_keys", 1, johnny_nif_hash_keys},
-    {"hash_to_list", 1, johnny_nif_hash_to_list},
-
-    {"info", 0, johnny_nif_info},
-    {"info", 1, johnny_nif_info}
+    {"new", 1, johnny_nif_hash_new},
+    {"clear", 1, johnny_nif_hash_clear},
+    {"get", 2, johnny_nif_hash_get},
+    {"get", 3, johnny_nif_hash_get},
+    {"put", 3, johnny_nif_hash_put},
+    {"del", 2, johnny_nif_hash_del},
+    {"size", 1, johnny_nif_hash_size},
+    {"keys", 1, johnny_nif_hash_keys},
+    {"to_list", 1, johnny_nif_hash_to_list}
 };
 
 

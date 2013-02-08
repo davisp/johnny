@@ -17,6 +17,7 @@
 
 #include "hash.h"
 
+
 #define JOHNNY_HASH_INIT_BUCKETS 1024
 #define JOHNNY_HASH_MAX_LOAD 0.75
 #define JOHNNY_HASH_MIN_LOAD 0.25
