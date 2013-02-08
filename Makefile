@@ -1,4 +1,9 @@
 
+TEST_MODULES = \
+    test/etap.beam \
+    test/gen_term.beam \
+    test/util.beam
+
 all: build
 
 clean:
@@ -15,7 +20,7 @@ build: deps
 	./rebar compile
 
 
-etap: test/etap.beam test/util.beam
+etap: $(TEST_MODULES)
 	prove test/*.t
 
 

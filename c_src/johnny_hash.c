@@ -140,24 +140,6 @@ error:
 
 
 ENTERM
-johnny_nif_hash_clear(ErlNifEnv* env, int argc, const ENTERM argv[])
-{
-    johnny_nif_hash_t* nh;
-    
-    if(argc != 1)
-        return enif_make_badarg(env);
-    if(!enif_get_resource(env, argv[0], JOHNNY_NIF_HASH_RES, (void**) &nh))
-        return enif_make_badarg(env);
-
-    enif_mutex_lock(nh->lock);
-    johnny_hash_clear(nh->hash);
-    enif_mutex_unlock(nh->lock);
-    
-    return JOHNNY_ATOM_OK;
-}
-
-
-ENTERM
 johnny_nif_hash_get(ErlNifEnv* env, int argc, const ENTERM argv[])
 {
     johnny_nif_hash_t* nh;
@@ -168,8 +150,6 @@ johnny_nif_hash_get(ErlNifEnv* env, int argc, const ENTERM argv[])
     if(argc != 2 && argc != 3)
         return enif_make_badarg(env);
     if(!enif_get_resource(env, argv[0], JOHNNY_NIF_HASH_RES, (void**) &nh))
-        return enif_make_badarg(env);
-    if(!enif_is_binary(env, argv[1]))
         return enif_make_badarg(env);
 
     key.env = env;
@@ -203,8 +183,6 @@ johnny_nif_hash_put(ErlNifEnv* env, int argc, const ENTERM argv[])
         return enif_make_badarg(env);
     if(!enif_get_resource(env, argv[0], JOHNNY_NIF_HASH_RES, (void**) &nh))
         return enif_make_badarg(env);
-    if(!enif_is_binary(env, argv[1]))
-        return enif_make_badarg(env);
 
     item = johnny_item_create(argv[1], argv[2]);
     if(!item)
@@ -235,8 +213,6 @@ johnny_nif_hash_del(ErlNifEnv* env, int argc, const ENTERM argv[])
         return enif_make_badarg(env);
     if(!enif_get_resource(env, argv[0], JOHNNY_NIF_HASH_RES, (void**) &nh))
         return enif_make_badarg(env);
-    if(!enif_is_binary(env, argv[1]))
-        return enif_make_badarg(env);
 
     key.env = env;
     key.key = argv[1];
@@ -254,6 +230,43 @@ johnny_nif_hash_del(ErlNifEnv* env, int argc, const ENTERM argv[])
     } else {
         return johnny_make_error(env, JOHNNY_ATOM_NOT_FOUND);   
     }
+}
+
+
+ENTERM
+johnny_nif_hash_clear(ErlNifEnv* env, int argc, const ENTERM argv[])
+{
+    johnny_nif_hash_t* nh;
+    
+    if(argc != 1)
+        return enif_make_badarg(env);
+    if(!enif_get_resource(env, argv[0], JOHNNY_NIF_HASH_RES, (void**) &nh))
+        return enif_make_badarg(env);
+
+    enif_mutex_lock(nh->lock);
+    johnny_hash_clear(nh->hash);
+    enif_mutex_unlock(nh->lock);
+    
+    return JOHNNY_ATOM_OK;
+}
+
+
+ENTERM
+johnny_nif_hash_size(ErlNifEnv* env, int argc, const ENTERM argv[])
+{
+    johnny_nif_hash_t* nh;
+    int size;
+
+    if(argc != 1)
+        return enif_make_badarg(env);
+    if(!enif_get_resource(env, argv[0], JOHNNY_NIF_HASH_RES, (void**) &nh))
+        return enif_make_badarg(env);
+
+    enif_mutex_lock(nh->lock);
+    size = johnny_hash_size(nh->hash);
+    enif_mutex_unlock(nh->lock);
+
+    return johnny_make_ok(env, enif_make_int(env, size));
 }
 
 
@@ -333,36 +346,17 @@ johnny_nif_hash_to_list(ErlNifEnv* env, int argc, const ENTERM argv[])
 }
 
 
-ENTERM
-johnny_nif_hash_size(ErlNifEnv* env, int argc, const ENTERM argv[])
-{
-    johnny_nif_hash_t* nh;
-    int size;
-
-    if(argc != 1)
-        return enif_make_badarg(env);
-    if(!enif_get_resource(env, argv[0], JOHNNY_NIF_HASH_RES, (void**) &nh))
-        return enif_make_badarg(env);
-
-    enif_mutex_lock(nh->lock);
-    size = johnny_hash_size(nh->hash);
-    enif_mutex_unlock(nh->lock);
-
-    return johnny_make_ok(env, enif_make_int(env, size));
-}
-
-
 static ErlNifFunc nif_funcs[] = {
-    {"new", 1, johnny_nif_hash_new},
-    {"clear", 1, johnny_nif_hash_clear},
+    {"new_nif", 1, johnny_nif_hash_new},
     {"get", 2, johnny_nif_hash_get},
     {"get", 3, johnny_nif_hash_get},
     {"put", 3, johnny_nif_hash_put},
     {"del", 2, johnny_nif_hash_del},
+    {"clear", 1, johnny_nif_hash_clear},
     {"size", 1, johnny_nif_hash_size},
     {"keys", 1, johnny_nif_hash_keys},
     {"to_list", 1, johnny_nif_hash_to_list}
 };
 
 
-ERL_NIF_INIT(johnny, nif_funcs, &load, &reload, &upgrade, &unload);
+ERL_NIF_INIT(johnny_hash, nif_funcs, &load, &reload, &upgrade, &unload);

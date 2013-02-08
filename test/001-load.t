@@ -6,7 +6,14 @@ main([]) ->
     code:add_pathz("test"),
     code:add_pathz("ebin"),
 
-    etap:plan(1),
-    etap:loaded_ok(johnny, "Loaded johnny"),
+    Modules = [
+        johnny,
+        johnny_hash
+    ],
+
+    etap:plan(length(Modules)),
+    lists:foreach(fun(M) ->
+        etap:loaded_ok(M, "Loaded " ++ atom_to_list(M))        
+    end, Modules),
     etap:end_tests().
 
