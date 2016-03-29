@@ -1,7 +1,7 @@
 .eunit/
+.rebar/
+c_src/*.d
 c_src/*.o
-c_src/lib/*.o
 deps/
 ebin/
 priv/
-test/*.beam

@@ -1,5 +1,5 @@
 {application, johnny, [
-    {description, "A NIF for efficient caching of Erlang terms."},
+    {description, "Various natively implemented data structures."},
     {vsn, git},
     {registered, []},
     {applications, [kernel]}
