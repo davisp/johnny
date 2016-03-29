@@ -7,5 +7,5 @@ clean:
 build:
 	rebar compile
 
-check:
+check: build
 	rebar eunit
